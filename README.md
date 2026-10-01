@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Go" src="https://img.shields.io/badge/Go-1.23-00ADD8?logo=go&logoColor=white">
+  <img alt="Go" src="https://img.shields.io/badge/Go-1.27.1-00ADD8?logo=go&logoColor=white">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-Control_Plane-4169E1?logo=postgresql&logoColor=white">
   <img alt="Docker" src="https://img.shields.io/badge/Docker-Runtime-2496ED?logo=docker&logoColor=white">
   <img alt="Garry's Mod" src="https://img.shields.io/badge/Garry's_Mod-SRCDS-1F6FEB?logo=steam&logoColor=white">
@@ -21,7 +21,7 @@ The repository demonstrates backend engineering, systems administration, network
 
 ## Quick Start
 
-Requirements: Go 1.23+, Docker with the Compose plugin, `make`, and enough disk space for a Garry's Mod dedicated server installation.
+Requirements: Go 1.27.1+, Docker with the Compose plugin, `make`, and enough disk space for a Garry's Mod dedicated server installation.
 
 ```bash
 git clone <your-repository-url>
