@@ -1,0 +1,162 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: game-server-control-plane
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gscp-config
+  namespace: game-server-control-plane
+data:
+  BIND_ADDRESS: ":8080"
+  LOG_LEVEL: "info"
+  DATA_ROOT: "/var/lib/game-control-plane/servers"
+  DOCKER_DATA_ROOT: "/var/lib/game-control-plane/servers"
+  BACKUP_ROOT: "/var/lib/game-control-plane/backups"
+  STEAMCMD_PATH: "/usr/local/bin/steamcmd"
+  DOCKER_BINARY: "/usr/bin/docker"
+  GARRYSMOD_IMAGE: "game-server-control-plane/garrysmod:local"
+  ALLOWED_PORT_MIN: "20000"
+  ALLOWED_PORT_MAX: "40000"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gscp-data
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /var/lib/game-control-plane
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gscp-data
+  namespace: game-server-control-plane
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: manual
+  volumeName: gscp-data
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gscp-api
+  namespace: game-server-control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gscp-api
+  template:
+    metadata:
+      labels:
+        app: gscp-api
+    spec:
+      containers:
+        - name: api
+          image: game-server-control-plane:latest
+          envFrom:
+            - configMapRef:
+                name: gscp-config
+            - secretRef:
+                name: gscp-secrets
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/game-control-plane
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: gscp-data
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gscp-worker
+  namespace: game-server-control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gscp-worker
+  template:
+    metadata:
+      labels:
+        app: gscp-worker
+    spec:
+      containers:
+        - name: worker
+          image: game-server-control-plane:latest
+          command: ["/usr/local/bin/worker"]
+          envFrom:
+            - configMapRef:
+                name: gscp-config
+            - secretRef:
+                name: gscp-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/game-control-plane
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: gscp-data
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gscp-api
+  namespace: game-server-control-plane
+spec:
+  selector:
+    app: gscp-api
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gscp-api
+  namespace: game-server-control-plane
+spec:
+  rules:
+    - host: gscp.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gscp-api
+                port:
+                  number: 80

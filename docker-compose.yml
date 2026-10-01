@@ -1,0 +1,80 @@
+services:
+  postgres:
+    restart: unless-stopped
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: gscp
+      POSTGRES_USER: gscp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gscp -d gscp"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    restart: unless-stopped
+    build: .
+    command: ["/usr/local/bin/api"]
+    environment: &app-env
+      DATABASE_URL: postgres://gscp:${POSTGRES_PASSWORD}@postgres:5432/gscp?sslmode=disable
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:?set SECRET_ENCRYPTION_KEY}
+      BIND_ADDRESS: :8080
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATA_ROOT: /var/lib/game-control-plane/servers
+      DOCKER_DATA_ROOT: ${PWD}/data/servers
+      BACKUP_ROOT: /var/lib/game-control-plane/backups
+      STEAMCMD_PATH: /usr/local/bin/steamcmd
+      DOCKER_BINARY: /usr/bin/docker
+      GARRYSMOD_IMAGE: game-server-control-plane/garrysmod:local
+      SESSION_TTL: ${SESSION_TTL:-24h}
+      SCHEDULER_INTERVAL: ${SCHEDULER_INTERVAL:-15s}
+      ALLOWED_PORT_MIN: ${ALLOWED_PORT_MIN:-20000}
+      ALLOWED_PORT_MAX: ${ALLOWED_PORT_MAX:-40000}
+      DEV_SEED: ${DEV_SEED:-false}
+      DEV_ADMIN_EMAIL: ${DEV_ADMIN_EMAIL:-}
+      DEV_ADMIN_PASSWORD: ${DEV_ADMIN_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/servers:/var/lib/game-control-plane/servers
+      - ./data/backups:/var/lib/game-control-plane/backups
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    restart: unless-stopped
+    build: .
+    entrypoint: ["/usr/local/bin/worker"]
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/servers:/var/lib/game-control-plane/servers
+      - ./data/backups:/var/lib/game-control-plane/backups
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["observability"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./deployments/docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

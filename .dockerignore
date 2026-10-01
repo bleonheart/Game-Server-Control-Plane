@@ -1,0 +1,9 @@
+.git
+.github
+.env
+bin
+data
+coverage.out
+*.log
+*.tar.gz
+*.zip
